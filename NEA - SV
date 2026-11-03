@@ -1,1 +1,142 @@
 #NEA
+mport pygame, sys, time, random
+
+pygame.init()
+WIDTH, HEIGHT = 900, 600
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Cricket Pitch Prototype")
+clock = pygame.time.Clock()
+
+GREEN = (60, 160, 60)
+BROWN = (150, 75, 0)
+WHITE = (255, 255, 255)
+BLUE = (100, 180, 255)
+
+# --- Ball class ---
+class Ball:
+    def __init__(self):
+        self.x = WIDTH // 2
+        self.y = 100           # bowler end
+        self.z = 0
+        self.vx = random.uniform(-1, 1)
+        self.vy = random.uniform(8, 12)
+        self.vz = random.uniform(3, 6)
+        self.in_play = True
+        self.has_bounced = False
+
+    def update(self, dt):
+        if not self.in_play: return
+        self.vz -= 9.81 * dt * 0.4
+        self.x += self.vx * dt * 60
+        self.y += self.vy * dt * 60
+        self.z += self.vz * dt * 60
+        if self.z <= 0 and not self.has_bounced:
+            self.z = 0
+            self.vz *= -0.45
+            self.vy *= 0.85
+            self.has_bounced = True
+        if self.y > HEIGHT - 120:  # reaches batter
+            self.in_play = False
+
+    def draw(self):
+        screen_x = int(self.x)
+        screen_y = int(self.y - self.z * 0.6)
+        size = max(4, int(10 - self.z * 0.2))
+        pygame.draw.circle(screen, WHITE, (screen_x, screen_y), size)
+        pygame.draw.circle(screen, (0, 0, 0), (int(self.x), int(self.y)), 4)
+
+# --- Bat class ---
+class Bat:
+    def __init__(self):
+        self.x = WIDTH // 2
+        self.y = HEIGHT - 100
+        self.angle = 0
+        self.swinging = False
+        self.direction = 1
+        self.last_swing_time = -999
+        self.shot_dir = 0  # -1 left, 0 straight, 1 right
+
+    def start_swing(self):
+        if not self.swinging:
+            self.swinging = True
+            self.angle = -40
+            self.direction = 1
+            self.last_swing_time = time.time()
+
+    def update(self, dt):
+        if self.swinging:
+            self.angle += 200 * dt * self.direction
+            if self.angle >= 40: self.direction = -1
+            if self.angle <= 0 and self.direction == -1:
+                self.swinging = False
+                self.angle = 0
+
+    def draw(self):
+        surf = pygame.Surface((20, 120), pygame.SRCALPHA)
+        pygame.draw.rect(surf, BROWN, (0, 0, 20, 120))
+        rot = pygame.transform.rotate(surf, self.angle)
+        rect = rot.get_rect(center=(self.x, self.y))
+        screen.blit(rot, rect)
+
+# --- Game class ---
+class CricketGame:
+    def __init__(self):
+        self.ball = Ball()
+        self.bat = Bat()
+        self.runs = 0
+        self.font = pygame.font.SysFont("Arial", 32)
+
+    def bowl_ball(self):
+        self.ball = Ball()
+
+    def update(self, dt):
+        self.ball.update(dt)
+        self.bat.update(dt)
+        if self.ball.in_play and self.bat.swinging:
+            if abs(self.ball.x - self.bat.x) < 40 and abs(self.ball.y - self.bat.y) < 40:
+                timing = time.time() - self.bat.last_swing_time
+                if timing <= 0.15:
+                    self.runs += 1
+                    self.ball.vx = random.uniform(-3, 3) + self.bat.shot_dir * 5
+                    self.ball.vy = -random.uniform(8, 12)
+                    self.ball.vz = random.uniform(3, 6)
+                else:
+                    self.ball.vx = random.uniform(-1, 1)
+                    self.ball.vy = -random.uniform(4, 7)
+                    self.ball.vz = random.uniform(1, 3)
+
+    def draw(self):
+        screen.fill(GREEN)
+        # pitch
+        pygame.draw.rect(screen, (180, 140, 90), (WIDTH//2 - 60, 100, 120, HEIGHT - 200))
+        # wickets
+        pygame.draw.rect(screen, WHITE, (WIDTH//2 - 10, 100, 6, 40))
+        pygame.draw.rect(screen, WHITE, (WIDTH//2, 100, 6, 40))
+        pygame.draw.rect(screen, WHITE, (WIDTH//2 + 10, 100, 6, 40))
+        pygame.draw.rect(screen, WHITE, (WIDTH//2 - 10, HEIGHT - 140, 6, 40))
+        pygame.draw.rect(screen, WHITE, (WIDTH//2, HEIGHT - 140, 6, 40))
+        pygame.draw.rect(screen, WHITE, (WIDTH//2 + 10, HEIGHT - 140, 6, 40))
+        self.ball.draw()
+        self.bat.draw()
+        score = self.font.render(f"Runs: {self.runs}", True, WHITE)
+        info = self.font.render("SPACE=Swing | ←/→=Direction | B=Bowl", True, BLUE)
+        screen.blit(score, (20, 20))
+        screen.blit(info, (20, 60))
+
+game = CricketGame()
+
+# --- Main loop ---
+while True:
+    dt = clock.tick(60) / 1000
+    for e in pygame.event.get():
+        if e.type == pygame.QUIT:
+            pygame.quit(); sys.exit()
+        if e.type == pygame.KEYDOWN:
+            if e.key == pygame.K_SPACE: game.bat.start_swing()
+            if e.key == pygame.K_b: game.bowl_ball()
+            if e.key == pygame.K_LEFT: game.bat.shot_dir = -1
+            if e.key == pygame.K_RIGHT: game.bat.shot_dir = 1
+            if e.key == pygame.K_UP: game.bat.shot_dir = 0
+    game.update(dt)
+    game.draw()
+    pygame.display.flip()
